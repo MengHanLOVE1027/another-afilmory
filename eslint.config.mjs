@@ -114,14 +114,6 @@ const hyobanConfig = await defineConfig(
     },
   },
 
-  // Backend framework isn't React — disable React-specific hooks rule there.
-  {
-    files: ['be/packages/framework/**/*.{ts,tsx}'],
-    rules: {
-      'react-hooks/rules-of-hooks': 'off',
-    },
-  },
-
   // Expo inlines EXPO_PUBLIC_* env vars only through literal `process.env` access,
   // and expo-router route files / page definitions must export non-component values.
   {

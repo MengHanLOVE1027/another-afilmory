@@ -20,7 +20,7 @@ import type { OgVendor } from './vendors/types'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, '../../../../..')
-const ogAssetsDir = path.join(repoRoot, 'be/apps/core/src/modules/content/og/assets')
+const ogAssetsDir = path.join(repoRoot, 'packages/builder/assets/og')
 
 const PLUGIN_NAME = 'afilmory:og-image'
 const RUN_STATE_KEY = 'state'
@@ -122,8 +122,6 @@ function getOrCreateRunState(container: Map<string, unknown>): PluginRunState {
 async function loadFontFile(fileName: string): Promise<Buffer | null> {
   const candidates = [
     path.join(ogAssetsDir, fileName),
-    path.join(repoRoot, 'apps/core/src/modules/content/og/assets', fileName),
-    path.join(repoRoot, 'core/src/modules/content/og/assets', fileName),
   ]
 
   for (const candidate of candidates) {

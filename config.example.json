@@ -1,0 +1,35 @@
+{
+  "name": "Another-Afilmory",
+  "title": "Another-Afilmory",
+  "description": "记录光线、颜色与日常。",
+  "url": "https://another-afilmory.local/",
+  "accentColor": "#e0a458",
+  "author": {
+    "name": "Another-Afilmory",
+    "url": "https://another-afilmory.local/",
+    "avatar": ""
+  },
+  "social": {
+    "github": "",
+    "twitter": ""
+  },
+  "map": ["maplibre"],
+  "mapStyle": "builtin",
+  "mapProjection": "globe",
+  "beian": {
+    "icp": {
+      "enabled": false,
+      "number": "",
+      "link": "https://beian.miit.gov.cn/"
+    },
+    "police": {
+      "enabled": false,
+      "number": "",
+      "code": "",
+      "icon": ""
+    }
+  },
+  "telemetry": {
+    "vibeloft": false
+  }
+}

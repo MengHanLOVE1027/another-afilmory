@@ -25,7 +25,7 @@
 - React 19 + Vite 8 + TypeScript
 - Tailwind CSS 4 + Motion
 - Jotai、React Router、TanStack Query/Virtual
-- Hono / Drizzle / PostgreSQL 保留在官方 `be/` 目录中，当前个人站后台使用 Vite 插件内置 API
+- 后台 API 由 `apps/web/plugins/vite` 内的 Vite 中间件提供，不依赖独立后端进程
 - `node:sqlite`（Node 22+ 内置）、scrypt 密码哈希
 - Sharp（缩略图/预览图）、exif 读取
 
@@ -140,16 +140,14 @@ apps/web/
 content/            # SQLite、备份、首次种子
 photos/             # 原始照片
 docs/               # 自定义后台说明、截图
-packages/           # 官方 Afilmory 包（builder、data、ui、typing 等）
-be/                 # 官方 Hono/Postgres/Redis 后端（当前个人站未启用）
+packages/           # Afilmory 上游包（builder、data、ui、typing 等）
 ```
 
 ## 已知限制
 
 - 登录、保存、上传 API 由 Vite 开发服务器提供；直接部署 `apps/web/dist` 静态文件时没有 `/api/*`，后台登录/保存不可用。
 - 当前照片存储固定为本地 `local`，不支持 S3/GitHub。
-- 预约与后台管理接口未接入官方 `be/apps/core` 的多租户/计费体系。
-- 官方 `be/` 的 Redis/PostgreSQL 配置保留但未启用；个人站的数据链路完全走 SQLite。
+- 官方 Hono/Postgres/Redis 后端已从仓库移除；本项目不包含多租户/计费服务，数据链路完全走 SQLite。
 - 仓库不再包含 Dockerfile / docker-compose；部署使用 Node + pnpm，照片、SQLite 与预览图都保存在本地目录。
 
 ## 致谢

@@ -2,9 +2,9 @@
 
 **Scope:** `apps/web` (the gallery SPA) and `packages/ui` (its primitives).
 
-**Out of scope:** `be/apps/dashboard` (a linear, data-first admin aesthetic — a deliberately
-different system, see `be/apps/dashboard/AGENTS.md`), `apps/mobile` (native Swift/UIKit,
-localized and styled natively), `apps/site` (Astro marketing site).
+**Out of scope:** the upstream Hono/Postgres dashboard (removed from this fork), `apps/mobile`
+(native Swift/UIKit, localized and styled natively), `apps/site` (Astro marketing site). The
+active admin UI is `/console` under `apps/web`, which follows its own light Halo-style layout.
 
 **Authority.** This document is derived from the shipped code, not from intent. It is
 normative for new code. A handful of existing files predate it and contradict it — those are
@@ -444,7 +444,7 @@ Existing code is not required to migrate immediately; new code must not add to t
 | Where | What |
 | --- | --- |
 | `apps/web/package.json` | `@headlessui/react` is a dependency with **zero** imports in `src` |
-| `packages/ui/src/button/Button.tsx`, `packages/ui/src/modal/Dialog.tsx` | `shape-squircle` class is applied, but it is only *defined* in `be/apps/dashboard/src/styles/tailwind.css`. In `apps/web` it is a **no-op** — those components do not actually get `corner-shape: squircle` |
+| `packages/ui/src/button/Button.tsx`, `packages/ui/src/modal/Dialog.tsx` | `shape-squircle` is applied, but the class was only defined in the removed upstream dashboard. In `apps/web` it is a **no-op** — those components do not actually get `corner-shape: squircle` |
 | `packages/ui/src/index.ts` | `./checkbox` and `./sonner` are each exported twice |
 
 ---

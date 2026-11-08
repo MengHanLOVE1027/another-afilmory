@@ -2,7 +2,7 @@
 
 本仓库基于 [Afilmory](https://github.com/Afilmory/afilmory) 二次开发，新增了内置后台、照片筛选、登录与角色权限、统一附件库、个人/团队协作模式，以及摄影集与分类管理。
 
-> 这是一套面向本仓库演示与自托管的轻量实现：账号、会话与后台配置全部保存在仓库内的 SQLite 数据库 `content/afilmory.db`，照片只写本地 `photos/` 目录，不依赖官方 Hono/PostgreSQL 服务；官方 `be/` 后端的 Redis 配置保持原样。若要接入官方账号体系，可继续使用 `be/apps/core` 与 `be/apps/dashboard`。
+> 这是一套面向本仓库演示与自托管的轻量实现：账号、会话与后台配置全部保存在仓库内的 SQLite 数据库 `content/afilmory.db`，照片只写本地 `photos/` 目录，不依赖独立后端服务；官方 Hono/PostgreSQL 后端已从本仓库移除。
 
 ## 启动
 
@@ -100,7 +100,7 @@ pnpm --filter @afilmory/web web --host 127.0.0.1 --port 5199
 - `GET /api/admin/manifest`
 - `GET /api/admin/export`、`POST /api/admin/import`、`POST /api/admin/backup`、`GET /api/admin/backups`
 
-页面首次加载时，Vite 插件会把配置注入 `window.__ADMIN_DATA__`。上传、删除、恢复、重新索引、导入后，后台会重新拉取 `/api/admin/data` 与 `/api/admin/manifest` 并更新 `photoLoader`，前端内容无需整页刷新。登录、保存、上传等 API 都由 Vite 开发服务器提供；静态构建（`pnpm build`）没有这些接口，后台会停在登录页。当前后台定位为本地/自托管演示与管理工具；照片只写本地目录，若要接官方账号体系，可改用 `be/apps/core` 的 better-auth 工作区权限。
+页面首次加载时，Vite 插件会把配置注入 `window.__ADMIN_DATA__`。上传、删除、恢复、重新索引、导入后，后台会重新拉取 `/api/admin/data` 与 `/api/admin/manifest` 并更新 `photoLoader`，前端内容无需整页刷新。登录、保存、上传等 API 都由 Vite 开发服务器提供；静态构建（`pnpm build`）没有这些接口，后台会停在登录页。当前后台定位为本地/自托管演示与管理工具；照片只写本地目录，多用户与权限由本仓库的 SQLite/角色系统自行管理。
 
 ### 2. 统一附件库
 

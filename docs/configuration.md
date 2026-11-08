@@ -28,7 +28,7 @@ Recommended structure (see `builder.config.default.ts`):
 
 - Storage: `S3_REGION`, `S3_ENDPOINT`, `S3_BUCKET_NAME`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_PREFIX`, `S3_CUSTOM_DOMAIN`, `S3_EXCLUDE_REGEX`
 - Repo sync (optional): `GIT_TOKEN`, `BUILDER_REPO_URL`, `BUILDER_REPO_BRANCH`
-- Database (backend): `PG_CONNECTION_STRING` (see backend docs for more)
+- Admin database: `AFILMORY_DB_PATH` (optional; defaults to `content/afilmory.db`)
 
 ## App Commands (common)
 

@@ -4,14 +4,14 @@
 - **apps/ssr**: Next.js 15 wrapper. Injects manifest into HTML for SEO/OG and serves SPA assets. Provides dynamic OG generation.
 - **packages/builder**: Photo pipeline. Syncs from storage (S3/B2/GitHub/local/Eagle), processes images, and writes manifest + thumbnails into the SPA.
 - **packages/data / packages/utils / packages/hooks / packages/components / packages/ui**: Shared data access, utilities, hooks, and design system pieces.
-- **be/**: Backend (Hono) and dashboard apps. Tenant/auth/billing logic lives here; see `docs/backend/*` and `be/apps/*/AGENTS.md`.
+- **Backend**: This fork has no separate backend process. `apps/web/plugins/vite` provides the admin/API routes, SQLite storage, media handling, RSS and sitemap; official Hono/Postgres/Redis services were removed.
 
 ## Data Flow
 
 1. Builder downloads photos from configured storage.
 2. Generates thumbnails and `photos-manifest.json` (`apps/web/src/data/photos-manifest.json`).
 3. SPA loads manifest either from the bundled JSON or `window.__MANIFEST__` when SSR/backend injects it.
-4. SSR wraps SPA for SEO/OG; backend can also inject manifest for full-server mode.
+4. SSR wraps SPA for SEO/OG; the Vite middleware can also inject manifest for full-server mode.
 
 ## Key Traits
 
