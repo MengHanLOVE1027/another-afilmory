@@ -64,7 +64,7 @@ function BookingPage() {
     return (
       <div className="fixed inset-0 z-90 overflow-y-auto overscroll-contain bg-[var(--site-bg)] text-[var(--site-fg)]">
         <PageHeader showViewControls={false} />
-        <main className="mx-auto flex w-full max-w-2xl flex-col items-center px-5 py-24 text-center">
+        <main className="page-emerge mx-auto flex w-full max-w-2xl flex-col items-center px-5 py-24 text-center">
           <span className="flex size-14 items-center justify-center rounded-full bg-[var(--site-fg)] text-[var(--site-bg)]">
             <CheckCircle2 className="size-6" />
           </span>
@@ -96,7 +96,7 @@ function BookingPage() {
   return (
     <div className="fixed inset-0 z-90 overflow-y-auto overscroll-contain bg-[var(--site-bg)] text-[var(--site-fg)]">
       <PageHeader showViewControls={false} />
-      <main className="mx-auto w-full max-w-5xl px-5 pt-16 pb-10 sm:px-8 sm:pt-20 sm:pb-14">
+      <main className="page-emerge mx-auto w-full max-w-5xl px-5 pt-16 pb-10 sm:px-8 sm:pt-20 sm:pb-14">
         <div className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr] lg:gap-14">
           <div className="lg:sticky lg:top-24 lg:self-start">
             <p className="text-[10px] tracking-[0.24em] text-[var(--site-muted)]">BOOKING</p>

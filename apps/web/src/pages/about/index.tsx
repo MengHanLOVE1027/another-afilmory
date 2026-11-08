@@ -1,5 +1,6 @@
 import { photoLoader } from '@afilmory/data'
 import { Camera, MapPin, Sparkles } from 'lucide-react'
+import { useState } from 'react'
 import { Link } from 'react-router'
 
 import { getAdminData } from '~/lib/admin/store'
@@ -72,7 +73,7 @@ function AboutPage() {
   const hero = about.heroPhotoId
     ? photos.find(photo => photo.id === about.heroPhotoId) ?? photos[0]
     : photos[0]
-  const heroSrc = hero ? `/previews/${hero.id}.jpg` : ''
+  const [heroSrc, setHeroSrc] = useState(hero ? `/previews/${hero.id}.jpg` : '')
   const avatar = about.avatarUrl || data.site.authorAvatar || '/logo.jpg'
   const contacts = [
     { label: '邮箱', value: about.email },
@@ -84,7 +85,7 @@ function AboutPage() {
   return (
     <div className="fixed inset-0 z-90 overflow-y-auto overscroll-contain bg-[var(--site-bg)] text-[var(--site-fg)]">
       <PageHeader showViewControls={false} />
-      <main className="mx-auto w-full max-w-4xl px-5 pt-16 pb-10 sm:px-8 sm:pt-20 sm:pb-14">
+      <main className="page-emerge mx-auto w-full max-w-4xl px-5 pt-16 pb-10 sm:px-8 sm:pt-20 sm:pb-14">
         <p className="text-[10px] tracking-[0.24em] text-[var(--site-muted)]">ABOUT</p>
         <h1 className="mt-3 text-4xl font-semibold tracking-tight sm:text-5xl">{data.site.title || data.site.name}</h1>
         <p className="mt-3 text-sm text-[var(--site-muted)]">{data.site.description || '摄影、生活与一些被记住的瞬间。'}</p>
@@ -107,7 +108,16 @@ function AboutPage() {
 
         {heroSrc && (
           <div className="mt-8 overflow-hidden rounded-2xl border border-[var(--site-line)] bg-[var(--site-line)]">
-            <img src={heroSrc} alt="关于页主图" className="aspect-[16/8] w-full object-cover" />
+            <img
+              src={heroSrc}
+              alt="关于页主图"
+              className="aspect-[16/8] w-full object-cover"
+              onError={() => {
+                if (hero?.originalUrl && heroSrc !== hero.originalUrl) {
+                  setHeroSrc(hero.originalUrl)
+                }
+              }}
+            />
           </div>
         )}
 

@@ -355,7 +355,7 @@ export const DEFAULT_ADMIN_DATA: AdminData = {
   home: {
     mode: 'random',
     count: 8,
-    interval: 6,
+    interval: 5,
     photoIds: [],
     title: 'Another-Afilmory',
     subtitle: '记录光线、颜色与日常。',

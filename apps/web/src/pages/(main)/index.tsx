@@ -84,7 +84,9 @@ const HomePage = () => {
   const [index, setIndex] = useState(0)
   const [hovered, setHovered] = useState<number | null>(null)
   const [paused, setPaused] = useState(false)
-  const [previewIndex, setPreviewIndex] = useState<number | null>(null)
+  const [previewIndex, setPreviewIndex] = useState<number | null>(0)
+  const [autoplayEpoch, setAutoplayEpoch] = useState(0)
+  const indexRef = useRef(0)
 
   const photos = useMemo(() => {
     const all = photoLoader.getPhotos()
@@ -103,8 +105,13 @@ const HomePage = () => {
   }, [home.mode, home.count, home.photoIds.join(','), manifestVersion])
 
   useEffect(() => {
-    setIndex(photos.length > 0 ? Math.floor(photos.length / 2) : 0)
-    setPreviewIndex(null)
+    indexRef.current = index
+  }, [index])
+
+  useEffect(() => {
+    setIndex(0)
+    indexRef.current = 0
+    setPreviewIndex(photos.length > 0 ? 0 : null)
   }, [photos])
 
   useEffect(() => {
@@ -112,11 +119,20 @@ const HomePage = () => {
       return
     }
     const timer = window.setInterval(() => {
-      setPreviewIndex(null)
-      setIndex(value => (value + 1) % photos.length)
-    }, Math.max(2, home.interval || 6) * 1000)
+      const nextIndex = (indexRef.current + 1) % photos.length
+      indexRef.current = nextIndex
+      setIndex(nextIndex)
+      setPreviewIndex(nextIndex)
+    }, Math.max(2, home.interval || 5) * 1000)
     return () => window.clearInterval(timer)
-  }, [paused, photos.length, home.interval])
+  }, [paused, photos.length, home.interval, autoplayEpoch])
+
+  const selectPhoto = (nextIndex: number) => {
+    setPaused(false)
+    setIndex(nextIndex)
+    setPreviewIndex(nextIndex)
+    setAutoplayEpoch(value => value + 1)
+  }
 
   const categoryEntries = useMemo(() => {
     const counts = new Map<string, number>()
@@ -168,7 +184,7 @@ const HomePage = () => {
         }}
       >
         {/* 移动端：单张轮播 */}
-        <div className="absolute inset-0 sm:hidden" onClick={() => setPreviewIndex(currentIndex)}>
+        <div className="absolute inset-0 sm:hidden" onClick={() => selectPhoto(currentIndex)}>
           <img
             src={photos[(currentIndex - 1 + photos.length) % photos.length].thumbnailUrl}
             alt=""
@@ -205,10 +221,7 @@ const HomePage = () => {
                   contain: 'paint',
                   transform: 'translateZ(0)',
                 }}
-                onClick={() => {
-                  setIndex(photoIndex)
-                  setPreviewIndex(photoIndex)
-                }}
+                onClick={() => selectPhoto(photoIndex)}
                 onMouseEnter={() => setHovered(photoIndex)}
                 onFocus={() => setHovered(photoIndex)}
                 onBlur={() => setHovered(null)}
@@ -301,10 +314,7 @@ const HomePage = () => {
                     ? 'w-5 bg-white'
                     : 'w-1.5 bg-white/35 hover:bg-white/65'
                 }`}
-                onClick={() => {
-                  setIndex(photoIndex)
-                  setPreviewIndex(photoIndex)
-                }}
+                onClick={() => selectPhoto(photoIndex)}
               />
             ))}
           </div>

@@ -806,7 +806,7 @@ const HomepagePanel = ({ data, commit }: { data: AdminData, commit: (data: Admin
               min={2}
               max={60}
               value={data.home.interval}
-              onChange={event => updateHome('interval', Math.max(2, Number(event.target.value) || 6))}
+              onChange={event => updateHome('interval', Math.max(2, Number(event.target.value) || 5))}
             />
           </Field>
         </div>
