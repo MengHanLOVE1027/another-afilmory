@@ -225,6 +225,10 @@ export default defineConfig(() => {
     ],
     server: {
       port: !DEV_NEXT_JS ? 1924 : 13333, // 1924 年首款 35mm 相机问世
+      // 本机通过 photos.huohuo.ink 反代/隧道访问时，Host 头会变成该域名，
+      // Vite 的 DNS-rebinding 防护默认只放行 localhost。前导点表示
+      // 该域名本身及其所有子域都放行（huohuo.ink、photos.huohuo.ink …）。
+      allowedHosts: ['.huohuo.ink'],
     },
     define: {
       APP_DEV_CWD: JSON.stringify(process.cwd()),
