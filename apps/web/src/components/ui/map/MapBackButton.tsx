@@ -9,7 +9,7 @@ export const MapBackButton = () => {
 
   const handleBack = () => {
     startTransition(() => {
-      navigate('/')
+      navigate('/gallery')
     })
   }
 

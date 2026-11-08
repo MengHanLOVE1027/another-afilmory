@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router'
 
-import { GenericMap, MapInfoPanel, MapLoadingState } from '~/components/ui/map'
+import { GenericMap, MapBackButton, MapInfoPanel, MapLoadingState } from '~/components/ui/map'
 import {
   calculateMapBounds,
   convertExifGPSToDecimal,
@@ -17,6 +17,7 @@ import type { MapBounds, PhotoMarker } from '~/types/map'
 export const MapSection = () => {
   return (
     <MapProvider>
+      <MapBackButton />
       <MapSectionContent />
     </MapProvider>
   )
