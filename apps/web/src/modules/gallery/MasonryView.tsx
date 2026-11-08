@@ -104,6 +104,7 @@ export const MasonryView = ({ photos, onRender }: MasonryViewProps) => {
       columnWidth={columnWidth}
       columnGutter={4}
       rowGutter={4}
+      scrollFps={24}
       itemHeightEstimate={400}
       itemKey={useCallback((data, _index) => {
         return data.id

@@ -267,8 +267,10 @@ export const useViewerTransitions = <
     }
 
     restoreTriggerElementVisibility()
+    // Keep the destination slot empty while the preview shrinks back. The
+    // gallery card must not sit underneath the exit preview, otherwise the
+    // slot briefly shows the full image layered over the transition.
     hideTriggerElement(resolvedTriggerElement)
-
     const transitionState: ViewerTransitionState = {
       itemId: currentItem.id,
       imageSrc,

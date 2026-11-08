@@ -10,7 +10,7 @@ import { generateBlurhash } from './blurhash.js'
 
 // 常量定义
 const THUMBNAIL_DIR = path.join(workdir, 'public/thumbnails')
-const THUMBNAIL_QUALITY = 100
+const THUMBNAIL_QUALITY = 82
 const THUMBNAIL_WIDTH = 600
 
 // 获取缩略图路径信息

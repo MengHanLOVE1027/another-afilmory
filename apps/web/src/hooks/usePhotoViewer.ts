@@ -14,6 +14,10 @@ import { PhotosContext } from '~/providers/photos-provider'
 
 const getData = () => photoLoader.getPhotos()
 
+// Photo IDs used to carry an 8-character digest suffix. Keep old links working
+// after the suffix was removed from the builder config.
+const stripLegacyDigest = (id: string) => id.replace(/_[0-9a-f]{8}$/i, '')
+
 function getCameraDisplayName(make: string, model: string): string {
   const makeName = make.trim()
   const modelName = model.trim()
@@ -238,11 +242,16 @@ export const usePhotoViewer = () => {
 
   // Derive currentIndex from URL photo ID
   const currentIndex = useMemo(() => {
-    if (!urlPhotoId) {
-      return viewerState.photoId ? photos.findIndex(p => p.id === viewerState.photoId) : 0
+    const targetId = urlPhotoId || viewerState.photoId
+    if (!targetId) {
+      return 0
     }
-    const index = photos.findIndex(p => p.id === urlPhotoId)
-    return index !== -1 ? index : 0
+    const directIndex = photos.findIndex(p => p.id === targetId)
+    if (directIndex !== -1) {
+      return directIndex
+    }
+    const legacyId = stripLegacyDigest(targetId)
+    return Math.max(0, photos.findIndex(p => p.id === legacyId))
   }, [urlPhotoId, photos, viewerState.photoId])
 
   const openViewer = useCallback(

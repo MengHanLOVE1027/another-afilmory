@@ -15,7 +15,7 @@ import {
   useViewerMobileInteractions,
   useViewerTransitions,
 } from '@afilmory/viewer-motion'
-import { PanelRightOpen } from 'lucide-react'
+import { Download, PanelRightOpen } from 'lucide-react'
 import { AnimatePresence, m } from 'motion/react'
 import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -30,7 +30,6 @@ import { deriveAccentFromSources } from '~/lib/color'
 import type { LoadingIndicatorRef } from '~/modules/inspector/LoadingIndicator'
 import { LoadingIndicator } from '~/modules/inspector/LoadingIndicator'
 import { PhotoInspector } from '~/modules/inspector/PhotoInspector'
-import { ShareModal } from '~/modules/social/ShareModal'
 import type { PhotoManifest } from '~/types/photo'
 
 import { ReactionRail } from '../social'
@@ -144,6 +143,23 @@ export const PhotoViewer = ({
     setDragDismissExitFrame(null)
     onClose()
   }, [onClose])
+
+  const handleDownloadOriginal = useCallback(() => {
+    if (!currentPhoto) {
+      return
+    }
+
+    const fileName = decodeURIComponent(
+      (currentPhoto.s3Key || currentPhoto.originalUrl).split('/').pop() || 'photo',
+    )
+    const link = document.createElement('a')
+    link.href = currentPhoto.originalUrl
+    link.download = fileName
+    link.rel = 'noopener'
+    document.body.append(link)
+    link.click()
+    link.remove()
+  }, [currentPhoto])
 
   const handleDragDismiss = useCallback(
     (snapshot: MobileViewerDismissSnapshot) => {
@@ -500,20 +516,16 @@ export const PhotoViewer = ({
                           </ActionButton>
                         )}
 
-                        {/* 分享按钮 */}
-                        <ShareModal
-                          photo={currentPhoto}
-                          blobSrc={currentBlobSrc || undefined}
-                          trigger={(
-                            <ActionButton
-                              disabled={!isMobileChromeInteractive}
-                              className={mobileChromeButtonClassName}
-                              title={t('photo.share.title')}
-                            >
-                              <i className="i-mingcute-share-2-line" />
-                            </ActionButton>
-                          )}
-                        />
+                        {/* 下载原图 */}
+                        <ActionButton
+                          disabled={!isMobileChromeInteractive}
+                          className={mobileChromeButtonClassName}
+                          onClick={handleDownloadOriginal}
+                          title={t('photo.share.download.original')}
+                          aria-label={t('photo.share.download.original')}
+                        >
+                          <Download className="size-4" />
+                        </ActionButton>
 
                         {/* 展开信息面板（桌面端在折叠时显示） */}
                         {!isMobile && !isInspectorVisible && (

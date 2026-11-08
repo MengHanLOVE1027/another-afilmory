@@ -2,7 +2,6 @@ import { Thumbhash } from '@afilmory/ui'
 import { getViewerTransitionTriggerProps } from '@afilmory/viewer-motion'
 import clsx from 'clsx'
 import { useAtomValue } from 'jotai'
-import { m } from 'motion/react'
 import { Fragment, createContext, memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -49,7 +48,9 @@ export const MasonryPhotoItem = memo(({ data, width, index = 0 }: { data: PhotoM
   const uploader = showUploader ? getPhotoUploader(data.id) : undefined
   const [imageLoaded, setImageLoaded] = useState(false)
   const [imageError, setImageError] = useState(false)
-  const [shouldAnimate] = useState(() => !enteredPhotoIds.has(data.id) && !galleryHasScrolled)
+  const [shouldAnimate, setShouldAnimate] = useState(
+    () => index < 12 && !enteredPhotoIds.has(data.id) && !galleryHasScrolled,
+  )
 
   useEffect(() => {
     enteredPhotoIds.add(data.id)
@@ -205,7 +206,7 @@ export const MasonryPhotoItem = memo(({ data, width, index = 0 }: { data: PhotoM
   }, [])
 
   return (
-    <m.div
+    <div
       className={clsx(
         'bg-fill-quaternary group relative w-full cursor-pointer overflow-hidden',
         shouldAnimate && 'photo-enter',
@@ -216,6 +217,11 @@ export const MasonryPhotoItem = memo(({ data, width, index = 0 }: { data: PhotoM
         animationDelay: shouldAnimate ? `${Math.min(index, 8) * 16}ms` : undefined,
       }}
       {...getViewerTransitionTriggerProps(data.id)}
+      onAnimationEnd={event => {
+        if (event.target === event.currentTarget && event.animationName === 'photo-enter') {
+          setShouldAnimate(false)
+        }
+      }}
       onClick={handleClick}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
@@ -226,9 +232,10 @@ export const MasonryPhotoItem = memo(({ data, width, index = 0 }: { data: PhotoM
       {!imageError && (
         <img
           ref={imageRef}
-          src={data.thumbnailUrl}
+          src={`${data.thumbnailUrl}?v=82`}
           alt={data.title}
           loading="lazy"
+          decoding="async"
           className={'absolute inset-0 h-full w-full object-cover duration-300 group-hover:scale-105'}
           onLoad={handleImageLoad}
           onError={handleImageError}
@@ -377,6 +384,6 @@ export const MasonryPhotoItem = memo(({ data, width, index = 0 }: { data: PhotoM
           </div>
         </div>
       )}
-    </m.div>
+    </div>
   )
 })

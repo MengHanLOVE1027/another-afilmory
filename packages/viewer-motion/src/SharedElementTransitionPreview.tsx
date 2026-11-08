@@ -1,6 +1,6 @@
 import { animate, m, useMotionValue } from 'motion/react'
 import type { ReactNode } from 'react'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import type { ViewerTransition } from './types'
 
@@ -36,10 +36,40 @@ export const SharedElementTransitionPreview = ({
   const opacity = useMotionValue(1)
   const hasReadyRef = useRef(false)
   const hasCompletedRef = useRef(false)
+  const imageRef = useRef<HTMLImageElement | null>(null)
+  const [isImageReady, setIsImageReady] = useState(false)
   const transformOrigin =
     transition.variant === 'exit'
       ? (transition.from.transformOrigin ?? transition.to.transformOrigin ?? '50% 50%')
       : (transition.to.transformOrigin ?? transition.from.transformOrigin ?? '50% 50%')
+
+  useEffect(() => {
+    setIsImageReady(false)
+    const image = imageRef.current
+    if (!image) {
+      return
+    }
+
+    let isCancelled = false
+    const markReady = () => {
+      if (!isCancelled) {
+        setIsImageReady(true)
+      }
+    }
+
+    // Cached images can finish before React attaches its synthetic onLoad.
+    // Check the element, listen natively, and decode again to cover all cases.
+    if (image.complete && image.naturalWidth > 0) {
+      markReady()
+    }
+    image.addEventListener('load', markReady)
+    void image.decode?.().then(markReady).catch(() => {})
+
+    return () => {
+      isCancelled = true
+      image.removeEventListener('load', markReady)
+    }
+  }, [transition.imageSrc])
 
   useEffect(() => {
     opacity.set(1)
@@ -136,22 +166,30 @@ export const SharedElementTransitionPreview = ({
           width: '100%',
           height: '100%',
           overflow: 'hidden',
-          background: 'black',
+          background: isImageReady ? 'black' : 'transparent',
+          // On exit, keep the real gallery card visible until the preview image
+          // has actually decoded. Otherwise a slow/missing image shows a blank
+          // rounded rectangle shrinking toward the thumbnail position.
+          visibility: transition.variant === 'exit' && !isImageReady ? 'hidden' : 'visible',
         }}
       >
         {thumbHash && renderPlaceholder ? (
           <div style={{ position: 'absolute', inset: 0 }}>{renderPlaceholder(thumbHash)}</div>
         ) : null}
         <img
+          ref={imageRef}
           src={transition.imageSrc}
           alt=""
           draggable={false}
+          onLoad={() => setIsImageReady(true)}
           style={{
             position: 'absolute',
             inset: 0,
             width: '100%',
             height: '100%',
             objectFit: 'cover',
+            opacity: isImageReady ? 1 : 0,
+            transition: 'opacity 120ms ease-out',
           }}
         />
       </div>
