@@ -41,10 +41,10 @@ export const PageHeader = ({
             />
           )
         : (
-            <div className="pointer-events-none absolute inset-x-0 top-0 z-[-1] h-15 border-b border-[var(--header-border)] bg-[var(--header-bg)] backdrop-blur-xl" />
+            <div className="pointer-events-none absolute inset-x-0 top-0 z-[-1] h-15 border-b border-[var(--header-border)] bg-[var(--header-bg)] backdrop-blur-xl lg:h-14" />
           )}
       <div
-        className={`flex h-12 items-center justify-between gap-2 px-3 lg:h-12 lg:gap-3 lg:px-4 text-[var(--header-fg)]`}
+        className="flex h-12 items-center justify-between gap-2 px-3 text-[var(--header-fg)] lg:h-12 lg:gap-3 lg:px-4"
       >
         <PageHeaderLeft photoCount={photoCount} />
         <PageHeaderCenter dateRange={dateRange} location={location} showDateRange={showDateRange} />

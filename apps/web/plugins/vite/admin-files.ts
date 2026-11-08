@@ -40,12 +40,18 @@ export function readManifest(): ManifestFile | null {
   }
 }
 
-function runBuilder(): Promise<void> {
+export function builderInvocation(): { command: string, args: string[] } {
   const isWindows = process.platform === 'win32'
-  const command = isWindows ? process.env.ComSpec || 'cmd.exe' : 'pnpm'
-  const args = isWindows
-    ? ['/d', '/s', '/c', 'pnpm --filter @afilmory/builder cli']
-    : ['--filter', '@afilmory/builder', 'cli']
+  return {
+    command: isWindows ? process.env.ComSpec || 'cmd.exe' : 'pnpm',
+    args: isWindows
+      ? ['/d', '/s', '/c', 'pnpm --filter @afilmory/builder cli']
+      : ['--filter', '@afilmory/builder', 'cli'],
+  }
+}
+
+function runBuilder(): Promise<void> {
+  const { command, args } = builderInvocation()
   return execFileAsync(command, args, {
     cwd: MONOREPO_ROOT_PATH,
     timeout: 180_000,
@@ -54,8 +60,52 @@ function runBuilder(): Promise<void> {
   }).then(() => undefined)
 }
 
+/**
+ * The builder mirrors `photos/` into `public/photos`, but on Windows its bulk
+ * `fs.cp` can abort on files currently open by Vite. This incremental sync
+ * makes sure newly added nested folders still get published without
+ * re-copying every unchanged file.
+ */
+export async function syncPublicPhotos(photosDir = resolvePhotosDir(undefined)): Promise<void> {
+  const pending = [photosDir]
+  while (pending.length > 0) {
+    const directory = pending.pop()
+    if (!directory) {
+      continue
+    }
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      if (entry.name.startsWith('_') || entry.name.startsWith('.')) {
+        continue
+      }
+      const source = path.join(directory, entry.name)
+      if (entry.isDirectory()) {
+        pending.push(source)
+        continue
+      }
+      if (!entry.isFile() || !DEFAULT_ALLOWED.includes(path.extname(entry.name).slice(1).toLowerCase())) {
+        continue
+      }
+      const relativePath = path.relative(photosDir, source).replaceAll('\\', '/')
+      const target = resolveInside(PUBLIC_PHOTOS_DIR, relativePath)
+      try {
+        const sourceStat = fs.statSync(source)
+        const targetStat = fs.existsSync(target) ? fs.statSync(target) : null
+        if (targetStat && targetStat.size === sourceStat.size && targetStat.mtimeMs >= sourceStat.mtimeMs) {
+          continue
+        }
+        fs.mkdirSync(path.dirname(target), { recursive: true })
+        await fs.promises.copyFile(source, target)
+      }
+      catch (error) {
+        console.warn(`[admin-files] 无法同步公开照片 ${relativePath}: ${(error as Error).message}`)
+      }
+    }
+  }
+}
+
 export async function rebuildManifest(): Promise<void> {
   await runBuilder()
+  await syncPublicPhotos()
 }
 
 export function resolvePhotosDir(basePath: string | undefined): string {
@@ -70,6 +120,36 @@ export function resolvePhotosDir(basePath: string | undefined): string {
 function safeFilename(input: string): string {
   const base = path.basename(input).replaceAll(/[^\w.\-()\u4E00-\u9FA5]/g, '_')
   return base || `photo-${Date.now()}.jpg`
+}
+
+function resolveInside(root: string, relativePath: string): string {
+  const target = path.resolve(root, relativePath)
+  if (target !== root && !target.startsWith(`${root}${path.sep}`)) {
+    throw new Error('路径必须位于照片目录内')
+  }
+  return target
+}
+
+function normalizeFolder(folder: string | undefined): string {
+  const value = (folder ?? '').trim().replaceAll('\\', '/').replace(/^\/+|\/+$/g, '')
+  if (!value) {
+    return ''
+  }
+  if (value.split('/').some(segment => !segment || segment === '.' || segment === '..')) {
+    throw new Error('文件夹名称不合法')
+  }
+  return value
+}
+
+function photoRelativePath(photo: ManifestPhoto): string {
+  const s3Key = (photo.s3Key ?? '').trim().replaceAll('\\', '/').replace(/^\/+/, '')
+  if (s3Key) {
+    return s3Key
+  }
+  const originalUrl = decodeURIComponent(photo.originalUrl ?? '')
+  const marker = '/photos/'
+  const index = originalUrl.indexOf(marker)
+  return index >= 0 ? originalUrl.slice(index + marker.length) : path.basename(originalUrl)
 }
 
 function uniquePath(dir: string, filename: string): string {
@@ -104,16 +184,19 @@ export async function saveUploads(
     basePath?: string
     allowedFormats?: string
     maxFileSizeMb?: number
+    folder?: string
   } = {},
 ): Promise<UploadedPhoto[]> {
   const photosDir = resolvePhotosDir(options.basePath)
-  fs.mkdirSync(photosDir, { recursive: true })
+  const folder = normalizeFolder(options.folder)
+  const targetDir = folder ? resolveInside(photosDir, folder) : photosDir
+  fs.mkdirSync(targetDir, { recursive: true })
   const allowed = (options.allowedFormats || DEFAULT_ALLOWED.join(','))
     .split(',')
     .map(item => item.trim().toLowerCase().replace(/^\./, ''))
     .filter(Boolean)
   const maxBytes = Math.max(1, options.maxFileSizeMb ?? 50) * 1024 * 1024
-  const written: Array<{ filename: string, originalName: string }> = []
+  const written: Array<{ relativePath: string, originalName: string }> = []
 
   try {
     for (const file of files) {
@@ -130,18 +213,26 @@ export async function saveUploads(
       if (buffer.length > maxBytes) {
         throw new Error(`文件超过 ${options.maxFileSizeMb ?? 50}MB 上限`)
       }
-      const target = uniquePath(photosDir, safeFilename(originalName))
+      const target = uniquePath(targetDir, safeFilename(originalName))
       fs.writeFileSync(target, buffer)
-      written.push({ filename: path.basename(target), originalName })
+      written.push({
+        relativePath: path.relative(photosDir, target).replaceAll('\\', '/'),
+        originalName,
+      })
     }
 
     await rebuildManifest()
     const manifest = readManifest()
     const uploaded = written.map((item) => {
-      const photo = manifest?.data.find(photo => photo.s3Key === item.filename || photo.originalUrl.endsWith(`/${item.filename}`))
+      const encodedPath = item.relativePath.split('/').map(encodeURIComponent).join('/')
+      const photo = manifest?.data.find(photo =>
+        photo.s3Key === item.relativePath
+        || decodeURIComponent(photo.originalUrl).endsWith(`/${item.relativePath}`)
+        || photo.originalUrl.endsWith(`/${encodedPath}`),
+      )
       return {
         id: photo?.id ?? '',
-        filename: item.filename,
+        filename: item.relativePath,
         originalName: item.originalName,
       }
     })
@@ -149,7 +240,7 @@ export async function saveUploads(
   }
   catch (error) {
     for (const item of written) {
-      fs.rmSync(path.join(photosDir, item.filename), { force: true })
+      fs.rmSync(resolveInside(photosDir, item.relativePath), { force: true })
     }
     throw error
   }
@@ -172,9 +263,9 @@ export async function removePhotos(photoIds: string[], options: { basePath?: str
     if (!photo) {
       continue
     }
-    const filename = photo.s3Key || path.basename(photo.originalUrl)
-    fs.rmSync(path.join(photosDir, filename), { force: true })
-    fs.rmSync(path.join(PUBLIC_PHOTOS_DIR, filename), { force: true })
+    const filename = photoRelativePath(photo)
+    fs.rmSync(resolveInside(photosDir, filename), { force: true })
+    fs.rmSync(resolveInside(PUBLIC_PHOTOS_DIR, filename), { force: true })
     fs.rmSync(path.join(THUMBNAILS_DIR, `${photo.id}.jpg`), { force: true })
     removed.push({ id: photo.id, filename })
   }
@@ -218,27 +309,22 @@ export function movePhotoToTrash(photoId: string, options: { basePath?: string }
     return null
   }
   const photosDir = resolvePhotosDir(options.basePath)
-  const filename = photo.s3Key || decodeURIComponent(path.basename(photo.originalUrl))
-  const publicFilename = decodeURIComponent(path.basename(photo.originalUrl))
+  const filename = photoRelativePath(photo)
+  const publicFilename = filename
   const dir = path.join(TRASH_DIR, photo.id)
   fs.mkdirSync(dir, { recursive: true })
-  moveFile(path.join(photosDir, filename), path.join(dir, filename))
-  if (publicFilename !== filename) {
-    moveFile(path.join(PUBLIC_PHOTOS_DIR, publicFilename), path.join(dir, `public-${publicFilename}`))
-  }
-  else {
-    moveFile(path.join(PUBLIC_PHOTOS_DIR, filename), path.join(dir, `public-${filename}`))
-  }
+  moveFile(resolveInside(photosDir, filename), path.join(dir, filename))
+  moveFile(resolveInside(PUBLIC_PHOTOS_DIR, publicFilename), path.join(dir, `public-${publicFilename}`))
   return { id: photo.id, filename, publicFilename, photo }
 }
 
 export function restorePhotoFromTrash(files: TrashedFiles, options: { basePath?: string } = {}): boolean {
   const photosDir = resolvePhotosDir(options.basePath)
   const dir = path.join(TRASH_DIR, files.id)
-  const restored = moveFile(path.join(dir, files.filename), path.join(photosDir, files.filename))
+  const restored = moveFile(path.join(dir, files.filename), resolveInside(photosDir, files.filename))
   moveFile(
     path.join(dir, `public-${files.publicFilename}`),
-    path.join(PUBLIC_PHOTOS_DIR, files.publicFilename),
+    resolveInside(PUBLIC_PHOTOS_DIR, files.publicFilename),
   )
   fs.rmSync(dir, { recursive: true, force: true })
   return restored

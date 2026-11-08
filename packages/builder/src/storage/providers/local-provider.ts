@@ -413,19 +413,61 @@ export class LocalStorageProvider implements StorageProvider {
 }
 
 /**
- * 将文件夹复制到 dist 目录（保持相对路径结构）。
+ * 将文件夹增量同步到 dist 目录（保持相对路径结构）。
+ *
+ * `fs.cp(..., { force: true })` 会重写每一个目标文件；在 Windows 上 Vite
+ * 往往正占用 `public/photos`，于是一个 EBUSY 就会中断整次复制，新增的
+ * 子目录反而没有发布。这里逐文件比较大小/时间，只复制新增或变化的文件。
  */
 async function copyToDist(fromPath: string, distPath: string): Promise<void> {
-  try {
-    // 确保目标目录存在
-    await fs.mkdir(distPath, { recursive: true })
-    await fs.cp(fromPath, distPath, {
-      recursive: true,
-      force: true,
-    })
+  let copied = 0
+  let skipped = 0
 
-    logger.main.log(`LocalStorageProvider: 已复制文件到发布目录： ${fromPath} -> ${distPath}`)
-  } catch (error) {
+  const walk = async (directory: string): Promise<void> => {
+    const entries = await fs.readdir(directory, { withFileTypes: true })
+    for (const entry of entries) {
+      if (entry.name.startsWith('_') || entry.name.startsWith('.')) {
+        continue
+      }
+      const source = path.join(directory, entry.name)
+      if (entry.isDirectory()) {
+        await walk(source)
+        continue
+      }
+      if (!entry.isFile()) {
+        continue
+      }
+      const relativePath = path.relative(fromPath, source)
+      const target = path.join(distPath, relativePath)
+      try {
+        const sourceStat = await fs.stat(source)
+        const targetStat = await fs.stat(target).catch(() => null)
+        if (targetStat && targetStat.size === sourceStat.size && targetStat.mtimeMs >= sourceStat.mtimeMs) {
+          skipped += 1
+          continue
+        }
+        await fs.mkdir(path.dirname(target), { recursive: true })
+        await fs.copyFile(source, target)
+        copied += 1
+      }
+      catch (error) {
+        const code = (error as NodeJS.ErrnoException).code
+        // 文件被 Vite 占用且目标已存在时保留旧文件即可，不影响新目录发布。
+        if ((code === 'EPERM' || code === 'EBUSY' || code === 'ENOENT') && await fs.stat(target).catch(() => null)) {
+          skipped += 1
+          continue
+        }
+        logger.main.warn(`LocalStorageProvider: 同步文件失败 ${relativePath}: ${(error as Error).message}`)
+      }
+    }
+  }
+
+  try {
+    await fs.mkdir(distPath, { recursive: true })
+    await walk(fromPath)
+    logger.main.log(`LocalStorageProvider: 已同步发布目录 ${fromPath} -> ${distPath}（复制 ${copied}，跳过 ${skipped}）`)
+  }
+  catch (error) {
     logger.main.error(`LocalStorageProvider: basePath: ${fromPath}, distPath: ${distPath}, 错误: ${error}`)
   }
 }

@@ -4,6 +4,32 @@ export interface UploadedPhoto {
   originalName: string
 }
 
+export interface RebuildJobLog {
+  at: string
+  level: 'info' | 'warn' | 'error'
+  message: string
+}
+
+export interface RebuildJob {
+  id: string
+  kind: 'rebuild'
+  status: 'running' | 'success' | 'error'
+  progress: number
+  message: string
+  logs: RebuildJobLog[]
+  startedAt: string
+  finishedAt?: string
+  error?: string
+}
+
+export interface AdminLogEntry {
+  id: number
+  at: string
+  level: 'info' | 'success' | 'warn' | 'error'
+  scope: 'api' | 'auth' | 'build' | 'file' | 'system'
+  message: string
+}
+
 function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
@@ -13,7 +39,10 @@ function fileToDataUrl(file: File): Promise<string> {
   })
 }
 
-export async function uploadPhotos(files: File[]): Promise<{ ok: boolean, uploaded?: UploadedPhoto[], error?: string }> {
+export async function uploadPhotos(
+  files: File[],
+  folder = '',
+): Promise<{ ok: boolean, uploaded?: UploadedPhoto[], error?: string }> {
   if (files.length === 0) {
     return { ok: false, error: '请选择照片' }
   }
@@ -25,7 +54,7 @@ export async function uploadPhotos(files: File[]): Promise<{ ok: boolean, upload
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ files: payload }),
+      body: JSON.stringify({ files: payload, folder }),
     })
     const data = await response.json() as { ok?: boolean, uploaded?: UploadedPhoto[], error?: string }
     if (!response.ok || !data.ok) {
@@ -57,19 +86,32 @@ export async function deletePhotos(photoIds: string[]): Promise<{ ok: boolean, e
   }
 }
 
-export async function rebuildAttachments(): Promise<{ ok: boolean, error?: string }> {
+export async function rebuildAttachments(): Promise<{ ok: boolean, job?: RebuildJob, error?: string }> {
   try {
     const response = await fetch('/api/admin/attachments/rebuild', {
       method: 'POST',
       credentials: 'same-origin',
     })
-    const data = await response.json() as { ok?: boolean, error?: string }
+    const data = await response.json() as { ok?: boolean, job?: RebuildJob, error?: string }
     if (!response.ok || !data.ok) {
       return { ok: false, error: data.error ?? '重建失败' }
     }
-    return { ok: true }
+    return { ok: true, job: data.job }
   }
   catch (error) {
     return { ok: false, error: (error as Error).message }
   }
+}
+
+export async function fetchRebuildJob(id?: string): Promise<RebuildJob | null> {
+  const query = id ? `?id=${encodeURIComponent(id)}` : ''
+  const response = await fetch(`/api/admin/attachments/rebuild${query}`, { credentials: 'same-origin' })
+  const data = await response.json() as { ok?: boolean, job?: RebuildJob }
+  return response.ok && data.ok && data.job ? data.job : null
+}
+
+export async function fetchAdminLogs(limit = 200): Promise<AdminLogEntry[]> {
+  const response = await fetch(`/api/admin/logs?limit=${limit}`, { credentials: 'same-origin' })
+  const data = await response.json() as { ok?: boolean, logs?: AdminLogEntry[] }
+  return response.ok && data.ok && Array.isArray(data.logs) ? data.logs : []
 }

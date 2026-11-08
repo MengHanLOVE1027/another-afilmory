@@ -7,7 +7,7 @@ import type { PhotoManifest } from '~/types/photo'
 
 import type { MasonryRef } from './Masonic'
 import { Masonry } from './Masonic'
-import { MasonryPhotoItem } from './MasonryPhotoItem'
+import { MasonryPhotoItem, markGalleryScrolled } from './MasonryPhotoItem'
 
 const COLUMN_WIDTH_CONFIG = {
   auto: {
@@ -35,6 +35,15 @@ export const MasonryView = ({ photos, onRender }: MasonryViewProps) => {
   const [containerWidth, setContainerWidth] = useState(0)
   const masonryRef = useRef<MasonryRef>(null)
   const isMobile = useMobile()
+
+  // 用户一旦开始滚动，后续挂载的照片直接显示，不再播放浮现动画。
+  useEffect(() => {
+    const handleScroll = () => markGalleryScrolled()
+    document.addEventListener('scroll', handleScroll, { capture: true, passive: true })
+    return () => {
+      document.removeEventListener('scroll', handleScroll, { capture: true })
+    }
+  }, [])
 
   // 监听容器宽度变化
   useEffect(() => {

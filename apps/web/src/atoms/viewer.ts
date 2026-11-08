@@ -10,6 +10,8 @@ export interface ViewerState {
   photoId: string | null
   // Internal state not synced with URL
   triggerElement: HTMLElement | null
+  // Route to return to when the viewer closes (captured before `/photos/:id`).
+  returnPath: string | null
 }
 
 export const viewerAtom = atom<ViewerState>({
@@ -18,6 +20,7 @@ export const viewerAtom = atom<ViewerState>({
   pendingCloseInstanceId: null,
   photoId: null,
   triggerElement: null,
+  returnPath: null,
 })
 
 // Helper to get viewer state from store

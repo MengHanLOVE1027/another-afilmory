@@ -38,7 +38,7 @@ apps/web/                 main site and /console admin
   src/pages/              home, gallery, albums, categories, booking, about, console
   src/modules/            gallery, discover, viewer, map, metadata
   src/lib/admin/          admin types, permissions, auth, bookings
-  plugins/vite/           admin-data, admin-db, admin-files, feed-sitemap, OG
+  plugins/vite/           admin-data, admin-db, admin-files, admin-jobs, admin-log, feed-sitemap, OG
   public/                 photos, thumbnails, previews, icons
 packages/                 Afilmory builder/data/ui/typing packages
 content/                  SQLite database, backups, seed JSON
@@ -54,10 +54,11 @@ Do not recreate `be/`, Docker Compose files or a separate backend for this proje
 2. Site content lives in the SQLite `settings` row `admin-data`; `content/admin-data.json` is only a first-run seed.
 3. `apps/web/plugins/vite/admin-db.ts` owns users, sessions and passwords.
 4. `admin-data.ts` exposes `/api/admin/*` and `/api/auth/*`; it validates permissions server-side.
-5. `admin-files.ts` handles uploads/deletes and calls the manifest builder to rebuild photos.
-6. Photos are served from `public/photos`; admin previews use `/previews/<id>.jpg`.
-7. `PageHeader` is shared by all public pages. The site is dark-only: `index.html` sets `data-theme="dark"`.
-8. Permissions are role-based. Contributors may only see/edit/delete their own photos.
+5. `admin-files.ts` handles uploads/deletes, incremental public-photo sync and manifest rebuilds.
+6. `admin-jobs.ts` runs the asynchronous reindex job; `admin-log.ts` keeps the in-memory admin log ring.
+7. Photos are served from `public/photos`; admin previews use `/previews/<id>.jpg`.
+8. `PageHeader` is shared by all public pages. The site is dark-only: `index.html` sets `data-theme="dark"`.
+9. Permissions are role-based. Contributors may only see/edit/delete their own photos.
 
 ## Configuration
 

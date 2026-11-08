@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   CalendarDays,
   Check,
+  ChevronLeft,
   ChevronRight,
   Database,
   Download,
@@ -20,6 +21,7 @@ import {
   Plus,
   RefreshCw,
   Save,
+  ScrollText,
   Search,
   ShieldCheck,
   Tags,
@@ -31,7 +33,15 @@ import {
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 
 import { photoManifestVersionAtom } from '~/atoms/app'
-import { deletePhotos, rebuildAttachments, uploadPhotos } from '~/lib/admin/attachments'
+import {
+  type AdminLogEntry,
+  type RebuildJob,
+  deletePhotos,
+  fetchAdminLogs,
+  fetchRebuildJob,
+  rebuildAttachments,
+  uploadPhotos,
+} from '~/lib/admin/attachments'
 import { fetchBookings, removeBooking, setBookingStatus } from '~/lib/admin/bookings'
 import {
   type AuthUser,
@@ -391,9 +401,8 @@ const OverviewPanel = ({
   const visiblePhotos = photoLoader.getPhotos().filter(photo =>
     canViewAll || data.photoMeta[photo.id]?.uploaderId === currentUser?.id,
   )
-  const visibleMeta = visiblePhotos.map(photo => data.photoMeta[photo.id]).filter(meta => meta !== undefined)
-  const uncategorized = visibleMeta.filter(meta => !meta.categoryIds?.length).length
-  const unassignedAlbum = visibleMeta.filter(meta => !meta.albumIds?.length).length
+  const uncategorized = visiblePhotos.filter(photo => !data.photoMeta[photo.id]?.categoryIds?.length).length
+  const unassignedAlbum = visiblePhotos.filter(photo => !data.photoMeta[photo.id]?.albumIds?.length).length
   const stats = [
     { label: canViewAll ? '照片' : '我的照片', value: visiblePhotos.length, icon: ImageIcon },
     ...(can('albums.view') || can('albums.manage') ? [{ label: '摄影集', value: data.albums.length, icon: FolderOpen }] : []),
@@ -1780,6 +1789,8 @@ const StoragePanel = ({
 }) => {
   const [dataMessage, setDataMessage] = useState<string | null>(null)
   const [backups, setBackups] = useState<Array<{ name: string, size: number, createdAt: string }>>([])
+  const [logs, setLogs] = useState<AdminLogEntry[]>([])
+  const [logsLoading, setLogsLoading] = useState(false)
   const importRef = useRef<HTMLInputElement>(null)
   const canBackup = hasPermission(currentUser, 'roles.manage')
   const canExport = hasPermission(currentUser, 'settings.site')
@@ -1795,8 +1806,18 @@ const StoragePanel = ({
     }
   }
 
+  const loadLogs = async () => {
+    if (!canBackup) {
+      return
+    }
+    setLogsLoading(true)
+    setLogs(await fetchAdminLogs(120))
+    setLogsLoading(false)
+  }
+
   useEffect(() => {
     void loadBackups()
+    void loadLogs()
   }, [])
 
   const handleBackup = async () => {
@@ -1952,6 +1973,42 @@ const StoragePanel = ({
           </div>
         )}
       </div>
+
+      {canBackup && (
+        <div className="mt-5 border-t border-[#f0f1f3] pt-5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="flex items-center gap-2 text-sm font-semibold">
+                <ScrollText className="size-4" />
+                运行日志
+              </h3>
+              <p className="mt-1 text-xs text-[#8a9099]">记录 API 请求、登录、索引任务与文件操作；内存环形缓冲，重启后清空。</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => { void loadLogs() }}
+              disabled={logsLoading}
+              className="flex h-9 items-center gap-1.5 rounded-lg border border-[#e3e5e8] px-3 text-sm text-[#4b5563] disabled:opacity-50"
+            >
+              <RefreshCw className={`size-4 ${logsLoading ? 'animate-spin' : ''}`} />
+              刷新
+            </button>
+          </div>
+          <div className="mt-3 max-h-72 overflow-y-auto rounded-lg border border-[#eceef1] bg-[#fbfcfd] p-2">
+            {logs.length === 0 && <p className="px-2 py-6 text-center text-xs text-[#9aa0a8]">暂无日志</p>}
+            {logs.map(line => (
+              <div key={line.id} className="flex gap-2 border-b border-[#f3f4f6] px-2 py-1.5 text-[11px] last:border-0">
+                <span className="w-28 shrink-0 text-[#9aa0a8]">{new Date(line.at).toLocaleTimeString('zh-CN')}</span>
+                <span className={`w-12 shrink-0 font-medium ${line.level === 'error' ? 'text-[#dc2626]' : line.level === 'warn' ? 'text-[#b45309]' : line.level === 'success' ? 'text-[#15803d]' : 'text-[#2563eb]'}`}>
+                  {line.level}
+                </span>
+                <span className="w-12 shrink-0 text-[#8a9099]">{line.scope}</span>
+                <span className="min-w-0 break-words text-[#4b5563]">{line.message}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </Panel>
   )
 }
@@ -1994,17 +2051,43 @@ const AttachmentsPanel = ({
   const [bulkUploader, setBulkUploader] = useState('')
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [folder, setFolder] = useState('*')
+  const [uploadFolder, setUploadFolder] = useState('')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(24)
+  const [job, setJob] = useState<RebuildJob | null>(null)
+  const [showJobLogs, setShowJobLogs] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  const refreshRef = useRef(onRefresh)
+  const folderOf = (photo: { s3Key?: string }) => {
+    const key = (photo.s3Key ?? '').replaceAll('\\', '/')
+    return key.includes('/') ? key.slice(0, key.lastIndexOf('/')) : ''
+  }
+  const folders = useMemo(
+    () => [...new Set(sourcePhotos.map(folderOf).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'zh-CN')),
+    [sourcePhotos],
+  )
+
+  useEffect(() => {
+    refreshRef.current = onRefresh
+  }, [onRefresh])
 
   useEffect(() => {
     setSelected([])
   }, [filter])
+
+  useEffect(() => {
+    setPage(1)
+  }, [filter, folder, pageSize, query])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     return sourcePhotos.filter((photo) => {
       const meta = data.photoMeta[photo.id] ?? {}
       if (q && !photo.id.toLowerCase().includes(q) && !JSON.stringify(photo.exif ?? {}).toLowerCase().includes(q)) {
+        return false
+      }
+      if (folder !== '*' && folderOf(photo) !== folder) {
         return false
       }
       switch (filter.kind) {
@@ -2028,7 +2111,39 @@ const AttachmentsPanel = ({
         }
       }
     })
-  }, [data.photoMeta, filter, sourcePhotos, query])
+  }, [data.photoMeta, filter, folder, sourcePhotos, query])
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize))
+  const pagedPhotos = filtered.slice((page - 1) * pageSize, page * pageSize)
+
+  useEffect(() => {
+    setPage(current => Math.min(current, pageCount))
+  }, [pageCount])
+
+  const runningJobId = job?.status === 'running' ? job.id : null
+  useEffect(() => {
+    if (!runningJobId) {
+      return
+    }
+    let cancelled = false
+    const tick = async () => {
+      const next = await fetchRebuildJob(runningJobId)
+      if (cancelled || !next) {
+        return
+      }
+      setJob(next)
+      if (next.status !== 'running') {
+        setMessage(next.message)
+        await refreshRef.current()
+      }
+    }
+    const timer = window.setInterval(() => { void tick() }, 700)
+    void tick()
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [runningJobId])
 
   const detail = detailId ? photos.find(photo => photo.id === detailId) : undefined
   const detailEditable = detail ? canEditPhoto(detail.id) : false
@@ -2089,15 +2204,16 @@ const AttachmentsPanel = ({
     setBusy(true)
     setMessage(null)
     await saveAdminData(data)
-    const result = await uploadPhotos([...files])
+    const result = await uploadPhotos([...files], uploadFolder)
     setBusy(false)
     if (!result.ok) {
       setMessage(result.error ?? '上传失败')
       return
     }
-    setMessage(`已上传 ${files.length} 张照片，正在刷新附件库…`)
+    const target = uploadFolder ? `到「${uploadFolder}」` : '到根目录'
+    setMessage(`已上传 ${files.length} 张照片${target}，正在刷新附件库…`)
     await onRefresh()
-    setMessage(`已上传 ${files.length} 张照片`)
+    setMessage(`已上传 ${files.length} 张照片${target}`)
   }
 
   const handleDelete = async () => {
@@ -2120,15 +2236,20 @@ const AttachmentsPanel = ({
   }
 
   const handleRebuild = async () => {
-    setBusy(true)
+    setMessage(null)
     const result = await rebuildAttachments()
-    setBusy(false)
     if (!result.ok) {
       setMessage(result.error ?? '重建失败')
       return
     }
-    await onRefresh()
-    setMessage('照片索引已更新')
+    if (result.job) {
+      setJob(result.job)
+      setMessage(result.job.message)
+    }
+    else {
+      await onRefresh()
+      setMessage('索引任务已启动')
+    }
   }
 
   const toggleDetailMeta = (kind: 'album' | 'category', id: string) => {
@@ -2160,11 +2281,11 @@ const AttachmentsPanel = ({
             <button
               type="button"
               onClick={handleRebuild}
-              disabled={busy || !canRebuild}
+              disabled={busy || !canRebuild || runningJobId !== null}
               className="flex h-9 items-center gap-1.5 rounded-lg border border-[#e3e5e8] px-3 text-sm text-[#4b5563] disabled:opacity-40"
             >
-              <RefreshCw className={`size-4 ${busy ? 'animate-spin' : ''}`} />
-              重新索引照片
+              <RefreshCw className={`size-4 ${runningJobId ? 'animate-spin' : ''}`} />
+              {runningJobId ? '索引中…' : '重新索引照片'}
             </button>
             {canUpload && (
               <>
@@ -2176,6 +2297,14 @@ const AttachmentsPanel = ({
                   className="hidden"
                   onChange={e => handleUpload(e.target.files)}
                 />
+                <div className="shrink-0" style={{ width: 176 }}>
+                  <input
+                    className={`${inputCls} h-9`}
+                    placeholder="上传到文件夹（可空）"
+                    value={uploadFolder}
+                    onChange={e => setUploadFolder(e.target.value.replaceAll('\\', '/'))}
+                  />
+                </div>
                 <button
                   type="button"
                   onClick={() => fileRef.current?.click()}
@@ -2243,11 +2372,53 @@ const AttachmentsPanel = ({
                 </optgroup>
               )}
             </select>
+            <select
+              className={`${inputCls} w-auto max-w-48`}
+              value={folder}
+              onChange={e => setFolder(e.target.value)}
+            >
+              <option value="*">全部文件夹</option>
+              <option value="">根目录</option>
+              {folders.map(item => <option key={item} value={item}>{item}</option>)}
+            </select>
             <span className="text-xs text-[#8a9099]">{filterLabel} · {filtered.length} 张</span>
             <span className="ml-auto text-xs text-[#8a9099]">当前账号：{currentUser.name}（{currentUser.roleName ?? roleNameOf(data, currentUser.role)}）</span>
           </div>
 
           {message && <div className="rounded-lg bg-[#f1f5ff] px-3 py-2 text-xs text-[#3355cc]">{message}</div>}
+
+          {job && (
+            <div className="rounded-lg border border-[#e3e5e8] bg-[#fbfcfd] p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`size-2 rounded-full ${job.status === 'running' ? 'animate-pulse bg-[#2563eb]' : job.status === 'success' ? 'bg-[#16a34a]' : 'bg-[#dc2626]'}`} />
+                <span className="text-xs font-medium text-[#1f2329]">
+                  {job.status === 'running' ? '正在索引照片' : job.status === 'success' ? '索引完成' : '索引失败'}
+                </span>
+                <span className="text-xs text-[#8a9099]">{job.progress}%</span>
+                <button type="button" onClick={() => setShowJobLogs(value => !value)} className="ml-auto text-xs text-[#4b5563] underline">
+                  {showJobLogs ? '收起日志' : '查看日志'}
+                </button>
+              </div>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#e8ebef]">
+                <div
+                  className={`h-full rounded-full transition-[width] ${job.status === 'error' ? 'bg-[#dc2626]' : 'bg-[#1f2329]'}`}
+                  style={{ width: `${Math.max(0, Math.min(100, job.progress))}%` }}
+                />
+              </div>
+              <p className="mt-2 text-xs text-[#6b7280]">{job.message}</p>
+              {job.error && job.status === 'error' && <p className="mt-1 text-xs text-[#dc2626]">{job.error}</p>}
+              {showJobLogs && (
+                <div className="mt-2 max-h-56 overflow-auto rounded-md bg-[#111827] p-2 font-mono text-[11px] leading-5 text-[#d1d5db]">
+                  {job.logs.length === 0 && <p className="text-[#9ca3af]">等待索引进程输出…</p>}
+                  {job.logs.slice(-80).map((line, index) => (
+                    <p key={`${line.at}-${index}`} className={line.level === 'error' ? 'text-[#fca5a5]' : line.level === 'warn' ? 'text-[#fcd34d]' : ''}>
+                      {line.message}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {selected.length > 0 && (canEditAll || canEditOwn || canAssign || canDeleteSelected) && (
             <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[#dbe3f0] bg-[#f7f9ff] p-3">
@@ -2292,7 +2463,7 @@ const AttachmentsPanel = ({
           )}
 
           <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 lg:grid-cols-8">
-            {filtered.map((photo) => {
+            {pagedPhotos.map((photo) => {
               const meta = data.photoMeta[photo.id] ?? {}
               const active = selected.includes(photo.id)
               return (
@@ -2300,6 +2471,11 @@ const AttachmentsPanel = ({
                   <button type="button" onClick={() => setDetailId(photo.id)} className="block w-full">
                     <img src={photo.thumbnailUrl} alt={photo.id} loading="lazy" className="aspect-square w-full bg-[#f3f4f6] object-cover transition-opacity group-hover:opacity-85" />
                   </button>
+                  {folderOf(photo) && (
+                    <span className="pointer-events-none absolute top-1.5 right-1.5 max-w-[80%] truncate rounded bg-black/55 px-1.5 py-0.5 text-[9px] text-white">
+                      {folderOf(photo)}
+                    </span>
+                  )}
                   <button
                     type="button"
                     onClick={() => toggleSelected(photo.id)}
@@ -2323,6 +2499,33 @@ const AttachmentsPanel = ({
                 </div>
               )
             })}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 border-t border-[#f0f1f3] pt-3 text-xs text-[#6b7280]">
+            <span>第 {page} / {pageCount} 页 · 共 {filtered.length} 张</span>
+            <div className="ml-auto flex items-center gap-2">
+              <select className="h-8 rounded-lg border border-[#e3e5e8] bg-white px-2" value={pageSize} onChange={e => setPageSize(Number(e.target.value))}>
+                <option value={24}>每页 24</option>
+                <option value={48}>每页 48</option>
+                <option value={96}>每页 96</option>
+              </select>
+              <button
+                type="button"
+                disabled={page <= 1}
+                onClick={() => setPage(value => Math.max(1, value - 1))}
+                className="flex size-8 items-center justify-center rounded-lg border border-[#e3e5e8] bg-white disabled:opacity-35"
+              >
+                <ChevronLeft className="size-4" />
+              </button>
+              <button
+                type="button"
+                disabled={page >= pageCount}
+                onClick={() => setPage(value => Math.min(pageCount, value + 1))}
+                className="flex size-8 items-center justify-center rounded-lg border border-[#e3e5e8] bg-white disabled:opacity-35"
+              >
+                <ChevronRight className="size-4" />
+              </button>
+            </div>
           </div>
 
           {filtered.length === 0 && (
@@ -2351,6 +2554,7 @@ const AttachmentsPanel = ({
                 <div className="mt-3 space-y-1 text-xs text-[#6b7280]">
                   <p>{detail.width} × {detail.height} · {(detail.size / 1024 / 1024).toFixed(1)} MB</p>
                   <p>{detail.format?.toUpperCase()} · {detail.lastModified ? new Date(detail.lastModified).toLocaleDateString('zh-CN') : '—'}</p>
+                  <p className="flex items-center gap-1"><FolderOpen className="size-3.5" />{folderOf(detail) || '根目录'}</p>
                   <a href={detail.originalUrl} target="_blank" rel="noreferrer" className="inline-block text-[#2563eb] hover:underline">查看原图</a>
                 </div>
               </div>

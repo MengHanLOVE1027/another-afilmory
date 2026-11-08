@@ -25,6 +25,21 @@ export type PhotoOpenHandler = (index: number, triggerElement?: HTMLElement) => 
 /** 集合页可以覆盖默认的 openViewer（默认会跳 /photos/:id），改为本地查看器。 */
 export const PhotoOpenContext = createContext<PhotoOpenHandler | null>(null)
 
+/**
+ * Masonry virtualizes rows and unmounts items outside the viewport. A CSS
+ * animation would replay every time an item scrolls back in, which looks like
+ * the photo disappears and fades in again. Remember which photos already had
+ * their entrance so remounts render at their final state immediately.
+ */
+const enteredPhotoIds = new Set<string>()
+let galleryHasScrolled = false
+
+/** Stop entrance animations once the user starts scrolling; newly mounted rows
+ * should appear immediately instead of fading in under the scroll gesture. */
+export const markGalleryScrolled = () => {
+  galleryHasScrolled = true
+}
+
 export const MasonryPhotoItem = memo(({ data, width, index = 0 }: { data: PhotoManifest; width: number; index?: number }) => {
   const photos = useContextPhotos()
   const photoViewer = usePhotoViewer()
@@ -34,6 +49,11 @@ export const MasonryPhotoItem = memo(({ data, width, index = 0 }: { data: PhotoM
   const uploader = showUploader ? getPhotoUploader(data.id) : undefined
   const [imageLoaded, setImageLoaded] = useState(false)
   const [imageError, setImageError] = useState(false)
+  const [shouldAnimate] = useState(() => !enteredPhotoIds.has(data.id) && !galleryHasScrolled)
+
+  useEffect(() => {
+    enteredPhotoIds.add(data.id)
+  }, [data.id])
 
   // Live Photo 相关状态
   const [isPlayingLivePhoto, setIsPlayingLivePhoto] = useState(false)
@@ -186,11 +206,14 @@ export const MasonryPhotoItem = memo(({ data, width, index = 0 }: { data: PhotoM
 
   return (
     <m.div
-      className="photo-enter bg-fill-quaternary group relative w-full cursor-pointer overflow-hidden"
+      className={clsx(
+        'bg-fill-quaternary group relative w-full cursor-pointer overflow-hidden',
+        shouldAnimate && 'photo-enter',
+      )}
       style={{
         width,
         height: calculatedHeight,
-        animationDelay: `${Math.min(index, 20) * 38}ms`,
+        animationDelay: shouldAnimate ? `${Math.min(index, 8) * 16}ms` : undefined,
       }}
       {...getViewerTransitionTriggerProps(data.id)}
       onClick={handleClick}

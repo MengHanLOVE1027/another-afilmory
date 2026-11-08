@@ -2,7 +2,7 @@ import { photoLoader } from '@afilmory/data'
 import type { PhotoManifest } from '~/types/photo'
 import { useAtomValue } from 'jotai'
 import { FolderOpen, Folder, UserRound, ArrowRight } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router'
 
 import { photoManifestVersionAtom } from '~/atoms/app'
@@ -10,6 +10,63 @@ import { getAdminData } from '~/lib/admin/store'
 import { PageHeader } from '~/modules/gallery/PageHeader'
 
 const previewOf = (photo: PhotoManifest) => `/previews/${photo.id}.jpg`
+
+/**
+ * The hero uses small thumbnails as the always-present base layer and fades
+ * the 1600px preview over it only after the browser has decoded it. This keeps
+ * an unloaded photo from painting blank (or blocking) during the flex-grow
+ * animation when the visitor switches to a photo that was not visible before.
+ */
+const HeroPreview = ({ photo }: { photo: PhotoManifest }) => {
+  const [ready, setReady] = useState(false)
+  const [source, setSource] = useState(() => previewOf(photo))
+  const imageRef = useRef<HTMLImageElement>(null)
+
+  useEffect(() => {
+    setReady(false)
+    setSource(previewOf(photo))
+  }, [photo.id])
+
+  useEffect(() => {
+    const image = imageRef.current
+    if (!image?.complete || image.naturalWidth === 0) {
+      return
+    }
+    const reveal = () => setReady(true)
+    if (typeof image.decode === 'function') {
+      void image.decode().then(reveal).catch(reveal)
+      return
+    }
+    reveal()
+  }, [source])
+
+  return (
+    <img
+      ref={imageRef}
+      src={source}
+      alt=""
+      aria-hidden
+      draggable={false}
+      decoding="async"
+      className={`absolute inset-0 size-full object-cover transition-opacity duration-300 ${ready ? 'opacity-100' : 'opacity-0'}`}
+      onError={() => {
+        if (source !== photo.originalUrl) {
+          setReady(false)
+          setSource(photo.originalUrl)
+        }
+      }}
+      onLoad={(event) => {
+        const image = event.currentTarget
+        const reveal = () => setReady(true)
+        if (typeof image.decode === 'function') {
+          void image.decode().then(reveal).catch(reveal)
+          return
+        }
+        reveal()
+      }}
+    />
+  )
+}
 
 function shuffled<T>(items: T[]): T[] {
   const copy = [...items]
@@ -27,6 +84,7 @@ const HomePage = () => {
   const [index, setIndex] = useState(0)
   const [hovered, setHovered] = useState<number | null>(null)
   const [paused, setPaused] = useState(false)
+  const [previewIndex, setPreviewIndex] = useState<number | null>(null)
 
   const photos = useMemo(() => {
     const all = photoLoader.getPhotos()
@@ -46,6 +104,7 @@ const HomePage = () => {
 
   useEffect(() => {
     setIndex(photos.length > 0 ? Math.floor(photos.length / 2) : 0)
+    setPreviewIndex(null)
   }, [photos])
 
   useEffect(() => {
@@ -53,21 +112,11 @@ const HomePage = () => {
       return
     }
     const timer = window.setInterval(() => {
+      setPreviewIndex(null)
       setIndex(value => (value + 1) % photos.length)
     }, Math.max(2, home.interval || 6) * 1000)
     return () => window.clearInterval(timer)
   }, [paused, photos.length, home.interval])
-
-  useEffect(() => {
-    if (photos.length === 0) {
-      return
-    }
-    for (const offset of [-1, 1]) {
-      const near = photos[(index + offset + photos.length) % photos.length]
-      const img = new Image()
-      img.src = previewOf(near)
-    }
-  }, [index, photos])
 
   const categoryEntries = useMemo(() => {
     const counts = new Map<string, number>()
@@ -119,22 +168,23 @@ const HomePage = () => {
         }}
       >
         {/* 移动端：单张轮播 */}
-        <div className="absolute inset-0 sm:hidden">
+        <div className="absolute inset-0 sm:hidden" onClick={() => setPreviewIndex(currentIndex)}>
           <img
-            src={previewOf(photos[(currentIndex - 1 + photos.length) % photos.length])}
+            src={photos[(currentIndex - 1 + photos.length) % photos.length].thumbnailUrl}
             alt=""
             aria-hidden
+            draggable={false}
+            decoding="async"
             className="absolute inset-0 size-full object-cover"
           />
           <img
-            key={current.id}
-            src={previewOf(current)}
+            src={current.thumbnailUrl}
             alt={current.title}
-            className="hero-fade absolute inset-0 size-full object-cover"
-            onError={(event) => {
-              event.currentTarget.src = current.originalUrl
-            }}
+            draggable={false}
+            decoding="async"
+            className="absolute inset-0 size-full object-cover"
           />
+          {previewIndex === currentIndex && <HeroPreview key={current.id} photo={current} />}
         </div>
 
         {/* 桌面端：横向手风琴 */}
@@ -155,21 +205,22 @@ const HomePage = () => {
                   contain: 'paint',
                   transform: 'translateZ(0)',
                 }}
-                onClick={() => setIndex(photoIndex)}
+                onClick={() => {
+                  setIndex(photoIndex)
+                  setPreviewIndex(photoIndex)
+                }}
                 onMouseEnter={() => setHovered(photoIndex)}
                 onFocus={() => setHovered(photoIndex)}
                 onBlur={() => setHovered(null)}
               >
                 <img
-                  src={previewOf(photo)}
+                  src={photo.thumbnailUrl}
                   alt={photo.title}
-                  loading="lazy"
+                  draggable={false}
                   decoding="async"
                   className="absolute inset-0 size-full object-cover"
-                  onError={(event) => {
-                    event.currentTarget.src = photo.originalUrl
-                  }}
                 />
+                {active && previewIndex === photoIndex && <HeroPreview key={photo.id} photo={photo} />}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/0 to-black/10" />
                 <div
                   className={`absolute inset-y-0 left-0 w-px transition-colors ${
@@ -250,7 +301,10 @@ const HomePage = () => {
                     ? 'w-5 bg-white'
                     : 'w-1.5 bg-white/35 hover:bg-white/65'
                 }`}
-                onClick={() => setIndex(photoIndex)}
+                onClick={() => {
+                  setIndex(photoIndex)
+                  setPreviewIndex(photoIndex)
+                }}
               />
             ))}
           </div>

@@ -45,6 +45,8 @@ import {
   restorePhotoFromTrash,
   saveUploads,
 } from './admin-files'
+import { getRebuildJob, getActiveRebuildJob, startRebuildJob } from './admin-jobs'
+import { addAdminLog, listAdminLogs } from './admin-log'
 
 const DATA_PATH = path.resolve(MONOREPO_ROOT_PATH, 'content/admin-data.json')
 const SCRIPT_ID = 'admin-data'
@@ -281,21 +283,25 @@ function assertRoleChangeAllowed(current: AdminRecord | null, next: AdminRecord,
   }
 }
 
-function normalizeUploadPayload(input: unknown): UploadInput[] {
+function normalizeUploadPayload(input: unknown): { folder: string, files: UploadInput[] } {
   if (!input || typeof input !== 'object') {
     throw new Error('Invalid upload payload')
   }
-  const files = (input as { files?: unknown }).files
+  const payload = input as { files?: unknown, folder?: unknown }
+  const files = payload.files
   if (!Array.isArray(files) || files.length === 0) {
     throw new Error('请选择要上传的照片')
   }
-  return files.map((file) => {
-    const item = file as { name?: unknown, data?: unknown }
-    if (typeof item.name !== 'string' || typeof item.data !== 'string') {
-      throw new Error('上传文件格式不正确')
-    }
-    return { name: item.name, data: item.data }
-  })
+  return {
+    folder: typeof payload.folder === 'string' ? payload.folder : '',
+    files: files.map((file) => {
+      const item = file as { name?: unknown, data?: unknown }
+      if (typeof item.name !== 'string' || typeof item.data !== 'string') {
+        throw new Error('上传文件格式不正确')
+      }
+      return { name: item.name, data: item.data }
+    }),
+  }
 }
 
 /**
@@ -329,6 +335,23 @@ export function adminDataPlugin(): Plugin {
           next()
           return
         }
+
+        const requestStartedAt = Date.now()
+        res.on('finish', () => {
+          if (
+            url.pathname === '/api/admin/logs'
+            || url.pathname.endsWith('/rebuild')
+            || url.pathname.endsWith('/rebuild/status')
+          ) {
+            return
+          }
+          const status = res.statusCode
+          addAdminLog({
+            scope: 'api',
+            level: status >= 500 ? 'error' : status >= 400 ? 'warn' : 'info',
+            message: `${req.method ?? 'GET'} ${url.pathname} · ${status} · ${Date.now() - requestStartedAt}ms`,
+          })
+        })
 
         try {
           if (url.pathname === '/api/bookings' && req.method === 'POST') {
@@ -524,6 +547,16 @@ export function adminDataPlugin(): Plugin {
             return
           }
 
+          if (url.pathname === '/api/admin/logs' && req.method === 'GET') {
+            if (!hasPermission(user, 'settings.storage')) {
+              sendJson(res, 403, { ok: false, error: '当前角色不能查看运行日志' })
+              return
+            }
+            const limit = Number(url.searchParams.get('limit') ?? 200)
+            sendJson(res, 200, { ok: true, logs: listAdminLogs(Number.isFinite(limit) ? limit : 200) })
+            return
+          }
+
           if (url.pathname === '/api/admin/data') {
             if (req.method === 'GET') {
               sendJson(res, 200, JSON.parse(readAdminData() ?? 'null'))
@@ -592,16 +625,17 @@ export function adminDataPlugin(): Plugin {
               return
             }
             const body = JSON.parse(await readBody(req, MAX_UPLOAD_SIZE)) as unknown
-            const files = normalizeUploadPayload(body)
+            const upload = normalizeUploadPayload(body)
             const data = readAdminObject()
             if (!data) {
               sendJson(res, 500, { ok: false, error: '后台配置未初始化' })
               return
             }
-            const uploaded = await saveUploads(files, {
+            const uploaded = await saveUploads(upload.files, {
               basePath: data.storage?.basePath,
               allowedFormats: data.storage?.allowedFormats,
               maxFileSizeMb: data.storage?.maxFileSizeMb,
+              folder: upload.folder,
             })
             for (const item of uploaded) {
               data.photoMeta = {
@@ -671,13 +705,33 @@ export function adminDataPlugin(): Plugin {
             return
           }
 
+          if (url.pathname === '/api/admin/attachments/rebuild' && req.method === 'GET') {
+            if (!hasPermission(user, 'attachments.rebuild')) {
+              sendJson(res, 403, { ok: false, error: '当前角色不能查看重建进度' })
+              return
+            }
+            const id = url.searchParams.get('id')
+            const job = id ? getRebuildJob(id) : getActiveRebuildJob()
+            if (!job) {
+              sendJson(res, 404, { ok: false, error: '没有正在进行的索引任务' })
+              return
+            }
+            sendJson(res, 200, { ok: true, job })
+            return
+          }
+
           if (url.pathname === '/api/admin/attachments/rebuild' && req.method === 'POST') {
             if (!hasPermission(user, 'attachments.rebuild')) {
               sendJson(res, 403, { ok: false, error: '当前角色不能重建附件索引' })
               return
             }
-            await rebuildManifest()
-            sendJson(res, 200, { ok: true })
+            const data = readAdminObject()
+            if (!data) {
+              sendJson(res, 500, { ok: false, error: '后台配置未初始化' })
+              return
+            }
+            const job = startRebuildJob(data.storage?.basePath)
+            sendJson(res, 202, { ok: true, job })
             return
           }
 
@@ -794,9 +848,13 @@ export function adminDataPlugin(): Plugin {
               sendJson(res, 403, { ok: false, error: '当前角色不能重新索引照片' })
               return
             }
-            await rebuildManifest()
-            const manifest = readManifest()
-            sendJson(res, 200, { ok: true, count: manifest?.data.length ?? 0 })
+            const data = readAdminObject()
+            if (!data) {
+              sendJson(res, 500, { ok: false, error: '后台配置未初始化' })
+              return
+            }
+            const job = startRebuildJob(data.storage?.basePath)
+            sendJson(res, 202, { ok: true, job })
             return
           }
 

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useNavigate } from 'react-router'
 import { RemoveScroll } from 'react-remove-scroll'
 
 import { PhotoOpenContext } from '~/modules/gallery/MasonryPhotoItem'
@@ -34,6 +35,7 @@ export const CollectionPage = ({
 }) => {
   const [viewer, setViewer] = useState<ViewerState | null>(null)
   const [isOpen, setIsOpen] = useState(false)
+  const navigate = useNavigate()
 
   const openPhoto = useCallback((index: number, triggerElement?: HTMLElement) => {
     setViewer({ index, triggerElement: triggerElement ?? null })
@@ -62,6 +64,20 @@ export const CollectionPage = ({
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [closeViewer, viewer])
+
+  // 没有打开查看器时，Esc 返回摄影集/分类列表。
+  useEffect(() => {
+    if (viewer) {
+      return
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        navigate(kind === 'album' ? '/albums' : '/categories')
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [kind, navigate, viewer])
 
   return (
     <div className="scroll-smooth fixed inset-0 z-90 overflow-y-auto bg-[#0a0a0b] text-white">

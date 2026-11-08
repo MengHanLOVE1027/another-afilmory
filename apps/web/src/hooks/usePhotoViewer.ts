@@ -252,6 +252,12 @@ export const usePhotoViewer = () => {
         return
       }
 
+      // Capture the page the viewer was opened from before navigating to
+      // `/photos/:id`; closing must return there instead of the home page.
+      const returnPath = location.pathname.startsWith('/photos/')
+        ? '/gallery'
+        : `${location.pathname}${location.search}`
+
       setViewer(prev => ({
         ...prev,
         isOpen: true,
@@ -259,6 +265,7 @@ export const usePhotoViewer = () => {
         pendingCloseInstanceId: null,
         photoId: photo.id,
         triggerElement: element || null,
+        returnPath,
       }))
 
       // Navigate to photo URL (creates history entry)
@@ -269,7 +276,7 @@ export const usePhotoViewer = () => {
 
       trackView(photo.id)
     },
-    [photos, navigate, location.search],
+    [photos, navigate, location.pathname, location.search],
   )
 
   const closeViewer = useCallback(() => {
@@ -280,13 +287,17 @@ export const usePhotoViewer = () => {
       triggerElement: null,
     }))
 
-    // Navigate back to gallery (creates history entry)
-    // Preserve map / scoped album / scoped category context.
+    // Return to the page that opened the viewer. `returnPath` is captured by
+    // openViewer before `/photos/:id` replaces the URL; fall back to the old
+    // scope-aware behavior for direct photo links.
     const params = new URLSearchParams(location.search)
     const scopeKind = params.get('scope')
     const scopeSlug = params.get('slug')
     const isMapPath = location.pathname.includes('/map')
-    if (isMapPath) {
+    if (viewerState.returnPath) {
+      navigate(viewerState.returnPath)
+    }
+    else if (isMapPath) {
       navigate(`/map${location.search}`)
     }
     else if (scopeKind === 'album' && scopeSlug) {
@@ -296,12 +307,12 @@ export const usePhotoViewer = () => {
       navigate(`/categories/${scopeSlug}`)
     }
     else {
-      navigate(`/${location.search}`)
+      navigate('/gallery')
     }
 
     // 恢复背景滚动
     document.body.style.overflow = ''
-  }, [navigate, location.search, location.pathname])
+  }, [navigate, location.search, location.pathname, viewerState.returnPath])
 
   const goToIndex = useCallback(
     (index: number) => {
