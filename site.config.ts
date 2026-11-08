@@ -1,0 +1,115 @@
+import { merge } from 'es-toolkit/compat'
+
+import userConfig from './config.json'
+
+export interface SiteConfig {
+  name: string
+  title: string
+  description: string
+  url: string
+  accentColor: string
+  viewer?: ViewerConfig
+  author: Author
+  social?: Social
+  feed?: Feed
+  map?: MapConfig
+  mapStyle?: string
+  mapProjection?: 'globe' | 'mercator'
+  beian?: BeianConfig
+  telemetry?: {
+    vibeloft?: boolean
+  }
+}
+
+/**
+ * ICP备案配置（中国大陆网站备案）
+ */
+interface ICPBeian {
+  /** 是否启用ICP备案显示 */
+  enabled?: boolean
+  /** ICP备案号 */
+  number?: string
+  /** ICP备案查询链接（默认：https://beian.miit.gov.cn/） */
+  link?: string
+}
+
+/**
+ * 公安备案配置
+ */
+interface PoliceBeian {
+  /** 是否启用公安备案显示 */
+  enabled?: boolean
+  /** 公安备案号文本 */
+  number?: string
+  /** 公安备案代码（用于查询链接） */
+  code?: string
+  /** 公安备案图标链接 */
+  icon?: string
+}
+
+/**
+ * 备案配置（中国大陆网站需要）
+ */
+interface BeianConfig {
+  /** ICP备案配置 */
+  icp?: ICPBeian
+  /** 公安备案配置 */
+  police?: PoliceBeian
+}
+
+/**
+ * Map configuration - can be either:
+ * - A string for a single provider: 'maplibre'
+ * - An array for multiple providers in priority order: ['maplibre']
+ */
+type MapConfig = 'maplibre'[]
+
+interface Feed {
+  folo?: {
+    challenge?: {
+      feedId: string
+      userId: string
+    }
+  }
+}
+interface Author {
+  name: string
+  url: string
+  avatar?: string
+}
+interface Social {
+  twitter?: string
+  github?: string
+}
+
+interface ViewerConfig {
+  regions?: {
+    accentSource?: 'system' | 'photo'
+    labelPlacement?: 'edge' | 'floating'
+  }
+}
+
+const defaultConfig: SiteConfig = {
+  name: 'Another-Afilmory',
+  title: 'Another-Afilmory',
+  description: '记录光线、颜色与日常。',
+  url: 'https://another-afilmory.local/',
+  accentColor: '#e0a458',
+  viewer: {
+    regions: {
+      accentSource: 'system',
+      labelPlacement: 'edge',
+    },
+  },
+  author: {
+    name: 'Another-Afilmory',
+    url: 'https://another-afilmory.local/',
+    avatar: '',
+  },
+  telemetry: {
+    vibeloft: false,
+  },
+}
+export const siteConfig = merge(defaultConfig, userConfig) as SiteConfig
+
+export default siteConfig

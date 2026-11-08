@@ -1,0 +1,13 @@
+{
+  "name": "@afilmory/data",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./manifest": "./src/photos-manifest.json",
+    "./types": "./src/types.ts"
+  },
+  "dependencies": {
+    "@afilmory/builder": "workspace:*"
+  }
+}
